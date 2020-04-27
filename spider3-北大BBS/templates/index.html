@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <!-- 引入 ECharts 文件 -->
+    <script src="https://cdn.bootcss.com/echarts/4.2.1-rc1/echarts-en.common.js"></script>
+	<link href="https://cdn.bootcss.com/twitter-bootstrap/4.3.1/css/bootstrap.min.css" rel="stylesheet">
+	<script src="https://cdn.bootcss.com/jquery/3.4.1/jquery.min.js"></script>
+	<script src="https://cdn.bootcss.com/wordcloud2.js/1.1.0/wordcloud2.js"></script>
+</head>
+
+<body>
+	<div class="page-header" style="margin:10px">
+		<h1 align='center'>北大未名BBS数据分析系统</h1>
+	</div>
+	
+	<div id="button" style="width:100%;margin:10px">
+		<button type="button" class="btn btn-success"  onclick="refresh()">刷新</button>
+	</div>
+	
+	<div id="section1" style="float:left;width:47%;border:1px solid red;margin:10px;">
+		<div style="height:50px;">
+			<h2 align='center'>BBS十大分析</h2>
+		</div>
+		<ul id="big_ten" class="list-group">
+			<li class="list-group-item">获取数据中... <button type="button" class="btn btn-info btn-sm" style="float:right">分析</button> </li>
+		</ul>
+		<div id="keyword" style="width: 100%;height:400px;border:1px solid red; padding:40px"> <canvas id="word_cloud" class="word_cloud" style="width: 100%;height:100%;"></canvas></div>
+		<div id="gender" style="width: 100%;height:400px;border:1px solid red; padding:40px"> </div>
+		<div id="rankpercent" style="width: 100%;height:400px;border:1px solid red; padding:40px"></div>
+		
+	</div> 
+
+	<div id="section2" style="float:right;width:47%;border:1px solid red;margin:10px;">
+		<div style="height:50px;">
+			<h2 align='center'>BBS热门板块分析</h2>
+		</div>
+		<ul id="big_block" class="list-group">
+			<li class="list-group-item">获取数据中... <button type="button" class="btn btn-info btn-sm" style="float:right">分析</button> </li>
+		</ul>
+		<div id="online" style="width: 100%;height:400px;border:1px solid red; padding:40px"> </div>
+		<div id="postnum" style="width: 100%;height:400px;border:1px solid red; padding:40px"> </div>
+		<div id="posttime" style="width: 100%;height:400px;border:1px solid red; padding:40px"></div>
+	</div> 
+	
+
+	
+	
+</body>
+	<script>
+	var data;
+	window.onload = get_and_load_data();
+	function get_and_load_data(){
+		var url = "http://127.0.0.1:5000/get_data";
+		//发送请求
+		var httpRequest = new  XMLHttpRequest();
+		httpRequest.open('GET', url, true);
+		httpRequest.send();
+		//解析服务器返回的json数据，加载到网页中
+		httpRequest.onreadystatechange = function () 
+		{
+			if (httpRequest.readyState == 4 && httpRequest.status == 200)
+			{
+				var json = httpRequest.responseText;//获取到json字符串，还需解析
+				dict = JSON.parse(json);
+				data = dict;
+				load_data(dict);
+			};
+		};
+	};
+	
+	function load_data(data){
+		//遍历添加信息列表，同时添加按钮，按钮绑定数据显示事件
+		var top_ten_data = data['1'];
+		var top_ten_ul = document.getElementById('big_ten');
+		top_ten_ul.innerHTML = '';  //清空原有列表
+		for(var k=1;k<=10;k++)  //添加新的列表
+		{
+			var rank = top_ten_data[k.toString()]['id'];
+			var section = top_ten_data[k.toString()]['section'];
+			var title = top_ten_data[k.toString()]['title'];
+			var url = top_ten_data[k.toString()]['url'];
+			var current_html = "<li class=\"list-group-item\">"+ rank + ". <b>" + section + "<b> " + title + "<button type=\"button\" class=\"btn btn-info btn-sm\" style=\"float:right\" onclick=\"analyse_top_ten('" + rank + "')\";>分析</button> <button type=\"button\" class=\"btn btn-success btn-sm\" style=\"float:right\" onclick=\"window.location.href='" + url + "'\";>访问</button> </li>"
+			top_ten_ul.innerHTML += current_html;
+		}
+		
+		var top_ten_block = data['2'];
+		//每个图都要写一个加载函数，更新每一个图
+		//对于针对一个帖子或针对一个版面的图表，初次显示top1数据
+		var top_block_ul = document.getElementById('big_block');
+		top_block_ul.innerHTML = '';
+		for(var k=1;k<=10;k++)
+		{
+			var rank = top_ten_block[k.toString()]['rank'];
+			var online = top_ten_block[k.toString()]['online'];
+			var postcount = top_ten_block[k.toString()]['postcount'];
+			var title = top_ten_block[k.toString()]['title'];
+			var url = top_ten_block[k.toString()]['url'];
+			var post = top_ten_block[k.toString()]['post'];
+			var current_html = "<li class=\"list-group-item\">"+ rank + ". <b>" + title  + "<button type=\"button\" class=\"btn btn-info btn-sm\" style=\"float:right\" onclick=\"analyse_top_block('" + rank + "')\";>分析</button> <button type=\"button\" class=\"btn btn-success btn-sm\" style=\"float:right\" onclick=\"window.location.href='" + url + "'\";>访问</button> </li>"
+			top_block_ul.innerHTML += current_html;
+		}
+		// 给出初始图
+		key_word_pic(1);
+		gender_percent(1);
+		rank_name_percent(1);
+		block_online_num();
+		block_total_post();
+		block_post_trend(1);
+	};
+	
+	//刷新关键词，性别比，等级类型占比
+	function analyse_top_ten(rank){
+		key_word_pic(rank);
+		gender_percent(rank);
+		rank_name_percent(rank);
+	}
+	
+	//刷新发帖趋势图
+	function analyse_top_block(rank){
+		block_post_trend(rank);
+	}
+
+	// 关键词图
+	function key_word_pic(rank){
+		var top_ten_data = data['1'];
+		var words = top_ten_data[rank.toString()]['keywords'];
+		list = [];
+		for (var i in words) {
+		  list.push([words[i], 20]);
+		}
+		WordCloud.minFontSize = "15px"
+		WordCloud(document.getElementById('word_cloud'), { list: list} );
+	}
+	
+	// 男女比例图
+	function gender_percent(rank){
+		var myChart = echarts.init(document.getElementById('gender'))
+		var top_ten_data = data['1'];
+		var gender = top_ten_data[rank.toString()]['gender'];
+		var mydata = [];
+		var i = 0;
+		for(var g in gender)
+		{
+			var o_g = {}
+			o_g['value'] = gender[g];
+			if(g == '-')
+			{
+				o_g['name'] = "未知";
+			}
+			if(g == 'F')
+			{
+				o_g['name'] = "女";
+			}
+			if(g == 'M')
+			{
+				o_g['name'] = "男";
+			}
+			mydata[i] = o_g;
+			i ++ ;
+		};
+		mydata = mydata.sort(function (a, b) { return a.value - b.value; });
+		option = {
+			backgroundColor: '#2c343c',
+			title: {
+				text: '参与讨论用户性别占比',
+				left: 'center',
+				top: 20,
+				textStyle: {
+					color: '#ccc'
+				}
+			},
+			tooltip : {
+				trigger: 'item',
+				formatter: "{a} <br/>{b} : {c} ({d}%)"
+			},
+			legend:{
+			orient:'vertical',
+			left:'left',
+			data:['男','女','未知']
+			},
+			visualMap: {
+				show: false,
+				min: 10,
+				max: 600,
+				inRange: {
+					colorLightness: [0, 1]
+				}
+			},
+			series : [
+				{
+					name:'性别占比',
+					type:'pie',
+					radius : '55%',
+					center: ['50%', '50%'],
+					data: mydata,
+					roseType: 'radius',
+					label: {
+						normal: {
+							textStyle: {
+								color: 'rgba(255, 255, 255, 0.3)'
+							}
+						}
+					},
+					labelLine: {
+						normal: {
+							lineStyle: {
+								color: 'rgba(255, 255, 255, 0.3)'
+							},
+							smooth: 0.2,
+							length: 10,
+							length2: 20
+						}
+					},
+					itemStyle: {
+						normal: {
+							color: '#c23531',
+							shadowBlur: 200,
+							shadowColor: 'rgba(0, 0, 0, 0.5)'
+						}
+					},
+
+					animationType: 'scale',
+					animationEasing: 'elasticOut',
+					animationDelay: function (idx) {
+						return Math.random() * 200;
+					}
+				}
+			]
+		};
+		myChart.setOption(option);
+	}
+	
+	// 等级比例图
+	function rank_name_percent(rank){
+		var myChart = echarts.init(document.getElementById('rankpercent'))
+		var top_ten_data = data['1'];
+		var rankname = top_ten_data[rank.toString()]['rankname'];
+		var mydata = [];
+		var i = 0;
+		var ranknames = []
+		for(var g in rankname)
+		{
+			var o_g = {}
+			o_g['value'] = rankname[g];
+			o_g['name'] = g;
+			mydata[i] = o_g;
+			ranknames[i] = g;
+			i ++ ;
+		};
+		mydata = mydata.sort(function (a, b) { return a.value - b.value; });
+		
+		option = {
+			backgroundColor: '#458B74',
+			title: {
+				text: '参与讨论用户等级占比',
+				left: 'center',
+				top: 20,
+				textStyle: {
+					color: '#ccc'
+				}
+			},
+			tooltip : {
+				trigger: 'item',
+				formatter: "{a} <br/>{b} : {c} ({d}%)"
+			},
+			legend:{
+			orient:'vertical',
+			left:'left',
+			data:ranknames
+			},
+			visualMap: {
+				show: false,
+				min: 10,
+				max: 600,
+				inRange: {
+					colorLightness: [0, 1]
+				}
+			},
+			series : [
+				{
+					name:'等级占比',
+					type:'pie',
+					radius : '55%',
+					center: ['50%', '50%'],
+					data: mydata,
+					roseType: 'radius',
+					label: {
+						normal: {
+							textStyle: {
+								color: 'rgba(255, 255, 255, 0.3)'
+							}
+						}
+					},
+					labelLine: {
+						normal: {
+							lineStyle: {
+								color: 'rgba(255, 255, 255, 0.3)'
+							},
+							smooth: 0.2,
+							length: 10,
+							length2: 20
+						}
+					},
+					itemStyle: {
+						normal: {
+							color: '#C0FF3E',
+							shadowBlur: 200,
+							shadowColor: 'rgba(0, 0, 0, 0.5)'
+						}
+					},
+
+					animationType: 'scale',
+					animationEasing: 'elasticOut',
+					animationDelay: function (idx) {
+						return Math.random() * 200;
+					}
+				}
+			]
+		};
+		myChart.setOption(option);	
+	}
+	
+	
+	// 板块在线人数图
+	function block_online_num(){
+		var myChart = echarts.init(document.getElementById('online'));
+		var top_ten_block = data['2'];
+		var x = [];
+		var y = [];
+		for(var k=1;k<=10;k++)
+		{
+			var online = top_ten_block[k.toString()]['online'];		
+			var title = top_ten_block[k.toString()]['title'];
+			x[k-1] = title.split(' ')[0];
+			y[k-1] = online;
+		};
+		option = {
+		    title: {
+				text: '板块在线人数',
+				left: 'center',
+				top: 20,
+				textStyle: {
+					color: '#2F4F4F'
+				}
+			},
+			tooltip: {
+                show:true,                  //---是否显示提示框,默认为true
+                trigger:'item',             //---数据项图形触发
+                axisPointer:{               //---指示样式
+                    type:'shadow',      
+                    axis:'auto',    
+
+                },
+                padding:5,
+                textStyle:{                 //---提示框内容样式
+                    color:"#fff",           
+                },
+            },
+		
+		
+		xAxis: {
+			type: 'category',
+			data: x,
+			axisLabel:{   
+                    show:true,        
+                    inside:false,               //---是否朝内
+                    rotate:-60,                   //---旋转角度   
+                    margin: 5,                  //---刻度标签与轴线之间的距离
+                }
+		},
+		yAxis: {
+			type: 'value'
+		},
+		series: [{
+			data: y,
+			type: 'bar'
+		}]
+		};
+		myChart.setOption(option);	
+		
+	}
+	
+	// 板块总贴数图
+	function block_total_post(){
+		var myChart = echarts.init(document.getElementById('postnum'));
+		var top_ten_block = data['2'];
+		var x = [];
+		var y = [];
+		for(var k=1;k<=10;k++)
+		{
+			var online = top_ten_block[k.toString()]['postcount'];		
+			var title = top_ten_block[k.toString()]['title'];
+			x[k-1] = title.split(' ')[0];
+			y[k-1] = online;
+		};
+		option = {
+		    title: {
+				text: '板块历史帖子总数',
+				left: 'center',
+				top: 20,
+				textStyle: {
+					color: '#2F4F4F'
+				}
+			},
+			tooltip: {
+                show:true,                  //---是否显示提示框,默认为true
+                trigger:'item',             //---数据项图形触发
+                axisPointer:{               //---指示样式
+                    type:'shadow',      
+                    axis:'auto',    
+
+                },
+                padding:5,
+                textStyle:{                 //---提示框内容样式
+                    color:"#fff",           
+                },
+            },
+		
+		
+		xAxis: {
+			type: 'category',
+			data: x,
+			axisLabel:{   
+                    show:true,        
+                    inside:false,               //---是否朝内
+                    rotate:-60,                   //---旋转角度   
+                    margin: 5,                  //---刻度标签与轴线之间的距离
+                }
+		},
+		yAxis: {
+			type: 'value'
+		},
+		series: [{
+			data: y,
+			type: 'bar'
+		}]
+		};
+		myChart.setOption(option);	
+		
+		
+	}
+	
+	
+	// 板块发帖趋势图
+	function block_post_trend(rank){
+		var myChart = echarts.init(document.getElementById('posttime'));
+		var top_ten_block = data['2'];
+		var post = top_ten_block[rank.toString()]['post'];
+		var x = [];
+		var y = [];
+		var i = 0;
+		for(var time in post)
+		{
+			x[i] = time;
+			y[i] = post[time];
+			i ++ ;
+		};
+		option = {
+			title: {
+				text: '板块发帖趋势图',
+				left: 'center',
+				top: 20,
+				textStyle: {
+					color: '#2F4F4F'
+				}
+			},
+            tooltip: {//提示框组件
+                trigger: 'axis',//坐标轴触发，主要在柱状图，折线图等会使用类目轴的图表中使用。只有设置了这个参数才会出现竖直的线条
+                axisPointer: {            // 坐标轴指示器，坐标轴触发有效
+                    type: 'line'        //指示器类型。
+                },
+                formatter: function (params) {//提示框自定义
+                    return formatterTip(params);
+                },
+            },	
+			xAxis: {
+				type: 'category',
+				boundaryGap: false,
+				data: x,
+			},
+			yAxis: {
+				type: 'value',
+			},
+			series: [{
+				type: 'line',
+				showSymbol: false,
+				hoverAnimation: false,
+				data: y
+			}]
+		
+		}
+		myChart.setOption(option);
+	}
+	
+	function formatterTip(params) {
+        //移除重复的数据
+        for (var i = 0; i < params.length; i++) {
+            for (var j = params.length - 1; j > i; j--) {
+                if (params[j].data == params[i].data) {
+                    params.splice(j, 1);
+                    break;
+                }
+            }
+        }
+        var tip = '';
+        for (var i = 0; i < params.length; i++) {//这里是自己定义样式， params[i].marker 表示是否显示左边的那个小圆圈
+            if (params[i].value != 0) {
+                tip = tip + params[i].marker + "发帖数量" + ':' + params[i].value + '<br/>';
+            }
+        }
+
+        return tip;
+    }
+	
+	function refresh(){
+		window.history.go(0);
+		get_and_load_data();
+	}
+	
+	</script>
+
+</html>
