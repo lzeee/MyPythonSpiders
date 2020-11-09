@@ -17,7 +17,7 @@ def get_novel(novel_url, result_path):
     html = html.decode('utf-8')  # 解码
 
     # 1.收集每个章节的url
-    # 每章的标签形式如下，有两种格式的段落标签，应该是为了反爬
+    # 每章的标签形式如下，有两种格式的标签，应该是为了反爬
     # <a target="_blank" title="x" href="y">x</a>
     # <b title="第44回 她将来会嫁谁？" onclick="window.open('http://www.luoxia.com/minglan/55839.htm')">第44回 她将来会嫁谁？</b>
     reg1 = r'<a target="_blank" title="(.*?)" href="(.*?)">.*?</a>'
@@ -30,10 +30,10 @@ def get_novel(novel_url, result_path):
     count = 0
 
     # 2.收集每个章节的内容
-    while(len(urls)>0):
+    while (len(urls) > 0):
         title, url = urls[0]
         try:
-            f = open(result_path+'{}.txt'.format(title), 'w', encoding='utf-8')
+            f = open(result_path + '{}.txt'.format(title), 'w', encoding='utf-8')  # 每一章新建文件
             f.write(title + '\n')
             site = urllib.request.urlopen(url, timeout=5)
             html = site.read().decode("utf-8")
@@ -48,7 +48,8 @@ def get_novel(novel_url, result_path):
                     f.write(p.string + '\n')
             f.close()
             count += 1
-            print("%.2f%% has been downloaded." %(count*100./sum))
+            # 输出%用来查看进度
+            print("%.2f%% has been downloaded." % (count * 100. / sum))
             urls.pop(0)
         except:
             time.sleep(0.1)
